@@ -50,7 +50,7 @@ const Editor = () => {
       quillServer.disable();
       quillServer.setText("Document is Loading...");
       setQuill(quillServer);
-      console.log("Quill is ready to use!");
+      // console.log("Quill is ready to use!");
     }
 
     //cleanup
@@ -103,20 +103,33 @@ const Editor = () => {
 
   useEffect(() => {
     if (socket === null || quill === null) return;
-    // gets the document id from the url
-    socket.emit("get-document", id);
     // load the document from the server
     socket.once("load-document", (document) => {
+      // console.log("Document loaded: ", document);
       quill.setContents(document);
       quill.enable();
     });
+    // gets the document id from the url
+    socket.emit("get-document", id);
+    // console.log("Requested to get the document with id: ", id);
   }, [socket, quill, id]);
+
+  //4. save the document to the server
+  useEffect(() => {
+    if (socket === null || quill === null) return;
+
+    const interval = setInterval(() => {
+      socket.emit("save-document", quill.getContents());
+    }, 2000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [socket, quill]);
 
   return (
     <Component>
-      <Box ref={currRef} className="container" id="container">
-        {" "}
-      </Box>
+      <Box ref={currRef} className="container" id="container"></Box>
     </Component>
   );
 };
