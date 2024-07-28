@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Quill from "quill";
 import "quill/dist/quill.snow.css";
 import { Box } from "@mui/material";
 import styled from "@emotion/styled";
+import io from "socket.io-client";
+import { useParams } from "react-router-dom";
 
 const Component = styled.div`
   background: #f5f5f5;
@@ -29,17 +31,26 @@ const toolbarOptions = [
 ];
 
 const Editor = () => {
+  const [quill, setQuill] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const { id } = useParams();
+
   const currRef = useRef(null);
 
+  // setup Quill
   useEffect(() => {
     if (!currRef.current) {
-      currRef.current = new Quill('#container', {
+      const quillServer = new Quill("#container", {
         theme: "snow",
         modules: {
           toolbar: toolbarOptions,
         },
       });
-      console.log("Quill is ready to use!")
+      currRef.current = quillServer;
+      quillServer.disable();
+      quillServer.setText("Document is Loading...");
+      setQuill(quillServer);
+      console.log("Quill is ready to use!");
     }
 
     //cleanup
@@ -49,6 +60,57 @@ const Editor = () => {
       }
     };
   }, []);
+
+  //1. connect to the server
+  useEffect(() => {
+    const socketServer = io("http://localhost:9000");
+    setSocket(socketServer);
+    return () => {
+      socketServer.disconnect();
+    };
+  }, []);
+
+  //2. send changes to the server
+  useEffect(() => {
+    if (socket === null || quill === null) return;
+
+    const handler = (delta, oldDelta, source) => {
+      if (source !== "user") return;
+      socket.emit("send-changes", delta);
+    };
+
+    quill.on("text-change", handler);
+
+    return () => {
+      quill.off("text-change", handler);
+    };
+  }, [socket, quill]);
+
+  //3. receive changes from the server
+  useEffect(() => {
+    if (socket === null || quill === null) return;
+
+    const handler = (delta) => {
+      quill.updateContents(delta);
+    };
+
+    socket.on("receive-changes", handler);
+
+    return () => {
+      socket.off("receive-changes", handler);
+    };
+  }, [socket, quill]);
+
+  useEffect(() => {
+    if (socket === null || quill === null) return;
+    // gets the document id from the url
+    socket.emit("get-document", id);
+    // load the document from the server
+    socket.once("load-document", (document) => {
+      quill.setContents(document);
+      quill.enable();
+    });
+  }, [socket, quill, id]);
 
   return (
     <Component>
